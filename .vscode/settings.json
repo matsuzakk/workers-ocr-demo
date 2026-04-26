@@ -1,0 +1,13 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always",
+    "source.organizeImports": "always"
+  },
+  "workbench.preferredHighContrastColorTheme": "Tomorrow Night Blue",
+  "workbench.preferredDarkColorTheme": "Tomorrow Night Blue",
+  "workbench.colorTheme": "Tomorrow Night Blue",
+  "workbench.preferredHighContrastLightColorTheme": "Tomorrow Night Blue",
+  "workbench.preferredLightColorTheme": "Tomorrow Night Blue"
+}
