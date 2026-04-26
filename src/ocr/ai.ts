@@ -10,10 +10,10 @@ ISBN: （あれば）
 /**
  * 画像 bytes を渡し、Workers AI によるテキスト抽出（OCR 相当）を行います。
  */
-export async function runOcr(
+export const runOcr = async (
   env: { AI: Ai },
   bytes: ArrayBuffer,
-): Promise<string> {
+): Promise<string> => {
   const u8 = new Uint8Array(bytes);
   if (u8.length === 0) {
     throw new Error("画像データが空です");
@@ -27,26 +27,39 @@ export async function runOcr(
     prompt: OCR_PROMPT,
   } as { image: number[]; prompt: string; max_tokens?: number })) as unknown;
 
-  return pickTextFromModelOutput(result);
-}
+  return stringifyModelOutput(result);
+};
 
-function pickTextFromModelOutput(r: unknown): string {
-  if (typeof r === "string") {
-    return r.trim();
+/**
+ * モデルや API のバージョンによって戻り値が異なるため、
+ * この関数ではモデルの戻り値を文字列に変換して返します。
+ */
+const stringifyModelOutput = (res: unknown): string => {
+  // モデルの戻り値が文字列の場合はそれを返します。
+  if (typeof res === "string") {
+    return res.trim();
   }
-  if (r && typeof r === "object") {
-    const o = r as Record<string, unknown>;
+
+  if (res && typeof res === "object") {
+    const o = res as Record<string, unknown>;
+    // モデルの戻り値が response というキーで文字列がある場合はそれを返します。
     if (typeof o.response === "string") {
       return o.response.trim();
     }
+
+    // モデルの戻り値が response というキーでオブジェクトがあり、そのオブジェクトに output または text というキーで文字列がある場合はそれを返します。
     if (o.response && typeof o.response === "object") {
       const r2 = o.response as { output?: string; text?: string };
-      if (typeof r2.output === "string") return r2.output.trim();
-      if (typeof r2.text === "string") return r2.text.trim();
+      if (r2.output && typeof r2.output === "string") return r2.output.trim();
+      if (r2.text && typeof r2.text === "string") return r2.text.trim();
     }
+
+    // モデルの戻り値が text というキーで文字列がある場合はそれを返します。
     if (typeof o.text === "string") {
       return o.text.trim();
     }
+
+    // モデルの戻り値が choices というキーで配列があり、その配列の0番目の要素に text または message というキーで文字列がある場合はそれを返します。
     if (Array.isArray(o.choices) && o.choices[0]) {
       const c0 = o.choices[0] as {
         text?: string;
@@ -56,8 +69,11 @@ function pickTextFromModelOutput(r: unknown): string {
       if (c0.message?.content) return String(c0.message.content).trim();
     }
   }
-  if (r != null) {
-    return String(r).trim();
+
+  // モデルの戻り値が null でない場合はそれを文字列に変換して返します。
+  if (res != null) {
+    return String(res).trim();
   }
+
   return "";
-}
+};

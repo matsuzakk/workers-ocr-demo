@@ -10,11 +10,11 @@ database_id = "00000000-0000-0000-0000-000000000000"
 
 [[durable_objects.bindings]]
 name = "OCR_JOBS"
-class_name = "OcrJob"
+class_name = "OcrJobDo"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["OcrJob"]
+new_classes = ["OcrJobDo"]
 
 [[r2_buckets]]
 binding = "CAPTURES"

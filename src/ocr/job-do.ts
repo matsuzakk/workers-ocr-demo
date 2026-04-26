@@ -1,12 +1,12 @@
-import type { Env } from "./env";
-import type { JobState } from "./types/message";
+import type { Env } from "../env";
+import type { JobState } from "../types/message";
 
 const STORAGE_KEY = "state";
 
 /**
  * ジョブ 1 件につき 1 インスタンス（`idFromName(jobId)`）
  */
-export class OcrJob {
+export class OcrJobDo {
   private state: JobState | null = null;
   private websockets: Set<WebSocket> = new Set();
 
@@ -61,6 +61,9 @@ export class OcrJob {
     return Date.now();
   }
 
+  /**
+   * ジョブを初期化
+   */
   private async handleInit(request: Request): Promise<Response> {
     let body: { jobId: string; r2Key: string };
     try {
@@ -92,6 +95,9 @@ export class OcrJob {
     });
   }
 
+  /**
+   * ジョブの状態を取得
+   */
   private async handleGetHttp(): Promise<Response> {
     const s = await this.load();
     if (!s) {
@@ -103,6 +109,9 @@ export class OcrJob {
     });
   }
 
+  /**
+   * ジョブのステータスを `processing` に遷移させる
+   */
   private async setProcessing(): Promise<Response> {
     const s = await this.load();
     if (!s) {
@@ -114,6 +123,9 @@ export class OcrJob {
     return new Response(JSON.stringify({ ok: true }));
   }
 
+  /**
+   * ジョブのステータスを `done` に遷移させる
+   */
   private async handleComplete(request: Request): Promise<Response> {
     let ocrText: string;
     try {
@@ -143,6 +155,9 @@ export class OcrJob {
     return new Response(JSON.stringify({ ok: true }));
   }
 
+  /**
+   * ジョブのステータスを `error` に遷移させる
+   */
   private async handleFail(request: Request): Promise<Response> {
     let err: string;
     try {
@@ -171,6 +186,9 @@ export class OcrJob {
     return new Response(JSON.stringify({ ok: true }));
   }
 
+  /**
+   * WebSocket 接続
+   */
   private async handleWebSocket(request: Request): Promise<Response> {
     if (!this.isWebSocketRequest(request)) {
       return new Response("expected Upgrade: websocket", { status: 426 });
@@ -194,6 +212,9 @@ export class OcrJob {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /**
+   * WebSocket メッセージを送信
+   */
   private async broadcast(msg: string): Promise<void> {
     for (const ws of this.websockets) {
       try {
