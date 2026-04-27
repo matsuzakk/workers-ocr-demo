@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import type { OcrQueueMessage } from "../types/message";
-import { runOcr } from "./ai";
+import { enrichOcrDraftWithCatalogTools, runOcr } from "./ai";
 
 /**
  * Durable Object への `stub.fetch` 用。実ホストは使わず、パスルーティング用のダミー。
@@ -45,12 +45,22 @@ export async function processMessageBatch(
 
     // 画像オブジェクトをバイト列に変換して OCRによる画像解析を実行
     const bytes = await obj.arrayBuffer();
+    const imageMime = obj.httpMetadata?.contentType ?? null;
     let text: string;
     try {
       // Workers AI による OCR を実行
-      text = await runOcr(env, bytes);
+      const draft = await runOcr(env, bytes, imageMime);
+      console.log("draft", draft);
+      text = draft;
       if (!text) {
         text = "(OCR 結果が空でした。画像の解像度・内容をご確認ください)";
+      } else {
+        try {
+          text = await enrichOcrDraftWithCatalogTools(env, draft);
+          console.log("enriched", text);
+        } catch {
+          text = draft;
+        }
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
