@@ -1,9 +1,9 @@
 import { buildApp } from "./app";
 import type { Env } from "./env";
-import { processMessageBatch } from "./ocr/queue";
+import { processMessageBatch } from "./queue";
 
 // DO クラスをエクスポート
-export { OcrJobDo } from "./ocr/job-do";
+export { OcrJobDo } from "./do/job";
 
 const app = buildApp();
 

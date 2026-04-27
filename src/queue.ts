@@ -1,6 +1,6 @@
-import type { Env } from "../env";
-import type { OcrQueueMessage } from "../types/message";
-import { enrichOcrDraftWithCatalogTools, runOcr } from "./ai";
+import type { Env } from "./env";
+import { enrichOcrDraftWithCatalogTools, runOcr } from "./ai/ocr";
+import type { OcrQueueMessage } from "./types/message";
 
 /**
  * Durable Object への `stub.fetch` 用。実ホストは使わず、パスルーティング用のダミー。
@@ -11,6 +11,10 @@ function durl(path: `/${string}`) {
   return `${DO_ORIGIN}${path}`;
 }
 
+/**
+ * Consumer Worker で実行される関数。
+ * Queue からメッセージを取得し、DO にジョブのステータスを作成して OCR と 本の検索 を実行します。
+ */
 export async function processMessageBatch(
   batch: MessageBatch<unknown>,
   env: Env,
