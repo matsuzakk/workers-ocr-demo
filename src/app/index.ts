@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Env } from "./env";
+import type { Env } from "../env";
 
 const DO_BASE = "https://do.internal";
 

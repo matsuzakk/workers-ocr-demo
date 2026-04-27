@@ -1,6 +1,6 @@
-import type { Env } from "./env";
-import { enrichOcrDraftWithCatalogTools, runOcr } from "./ai/ocr";
-import type { OcrQueueMessage } from "./types/message";
+import { enrichOcrDraftWithCatalogTools, runOcr } from "../ai/ocr";
+import type { Env } from "../env";
+import type { OcrQueueMessage } from "./types";
 
 /**
  * Durable Object への `stub.fetch` 用。実ホストは使わず、パスルーティング用のダミー。

@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import type { JobState } from "../types/message";
+import type { JobState } from "./types";
 
 const STORAGE_KEY = "state";
 

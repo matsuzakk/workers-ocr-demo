@@ -1,4 +1,4 @@
-import type { OcrQueueMessage } from "./types/message";
+import type { OcrQueueMessage } from "./queue/types";
 
 export type Env = {
   OCR_QUEUE: Queue<OcrQueueMessage>;
