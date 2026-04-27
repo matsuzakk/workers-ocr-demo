@@ -6,4 +6,6 @@ export type Env = {
   AI: Ai;
   CAPTURES: R2Bucket;
   DB: D1Database;
+  /** Google Books API key */
+  GOOGLE_BOOKS_API_KEY?: string;
 };

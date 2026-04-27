@@ -1,6 +1,10 @@
 import type { AiTextGenerationToolInputWithFunction } from "@cloudflare/ai-utils";
 import { runWithTools } from "@cloudflare/ai-utils";
-import { fetchAmazonJpBooksSearchJson } from "./search";
+import type { Env } from "../env";
+import {
+  searchGoogleBooksByAuthor,
+  searchGoogleBooksByTitle,
+} from "./books-search/google";
 
 const KIMI_MODEL = "@cf/moonshotai/kimi-k2.5" as const;
 
@@ -8,8 +12,8 @@ const OCR_PROMPT = `次の本の表紙・裏表紙・背表紙の画像から、
 
 タイトル: （あれば）
 著者: （あれば）
-ISBN: （あれば）
-その他: （上記以外の重要な表記）`;
+ISBN: （バーコードが読み取れた場合のみ。不明な場合は「不明」）
+その他: （上記以外の重要な表記。不明な場合は「不明」）`;
 
 function sniffImageMime(u8: Uint8Array, hint?: string | null): string {
   const h = hint?.split(";")[0]?.trim().toLowerCase();
@@ -136,53 +140,60 @@ export const runOcr = async (
 
 const LLAMA_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct" as const;
 
-const ENRICH_SYSTEM = `あなたは書誌データの編集者です。ユーザーから渡される「OCRで読み取った下書き」を基に、必ず search_amazon_jp_books を呼び出してください。
+const ENRICH_SYSTEM = `あなたは書誌データの編集者です。ユーザーから渡される「OCRで読み取った下書き」を基に、必ず search_google_books を1回以上呼び出してください。
 
-Amazon.co.jp の「本」検索結果ページを取得し、HTMLから抽出した商品（タイトル・ASIN・product_url）を確認し、OCRのタイトル・著者に最も近い候補を選んでください。必要ならキーワードを変えて複数回検索してもよい。
+Google Books API の JSON（results に title・authors・previewLink・infoLink 等）を確認し、OCRのタイトル・著者に最も近い候補を選んでください。field は title（表題で探す）か author（著者で探す）を状況に応じて選び、必要なら別の query で繰り返してもよい。
 
-最終回答は Amazon 検索ツールで得た事実を優先し、次の行形式のみで書くこと。ISBNはツール結果の isbn10_from_url または OCR で読み取れたもののみ採用し、捏造しない。
+最終回答はツールで得た事実を優先し、次の行形式のみで書くこと。ISBNはOCRで読み取れたもののみ採用し、ツール結果に明確な根拠がない限り捏造しない。
 
-タイトル: （Amazon候補とOCRを突き合わせた表記）
+タイトル: （候補とOCRを突き合わせた表記）
 著者: （分かる範囲）
-ISBN: （ツールまたはOCRで根拠がある場合のみ。なければ「不明」）
-その他: （Amazonの商品タイトルやOCRから補える重要表記のみ）
-Amazon JP（商品ページ）: （選んだ1件の product_url をそのまま）
-Amazon JP（検索結果ページ）: （ツールが返した search_url）`;
-
-const searchAmazonJpBooksTool: AiTextGenerationToolInputWithFunction = {
-  name: "search_amazon_jp_books",
-  description:
-    "Amazon.co.jp の本カテゴリ検索ページを取得し、検索結果として表示されている商品（ASIN・タイトル・商品URL）を抽出して返します。OCRのタイトル・著者から検索キーワードを組み立てて呼び出してください。",
-  parameters: {
-    type: "object",
-    properties: {
-      keywords: {
-        type: "string",
-        description:
-          "Amazon 検索キーワード。タイトル＋著者名をスペース区切りで含めるとよい。",
-      },
-    },
-    required: ["keywords"],
-  },
-  function: async (args: { keywords?: unknown }) => {
-    const keywords = typeof args?.keywords === "string" ? args.keywords : "";
-    const payload = await fetchAmazonJpBooksSearchJson(keywords);
-    return JSON.stringify(payload);
-  },
-};
+ISBN: （OCRで根拠がある場合のみ。なければ「不明」）
+その他: （ツール結果やOCRから補える重要表記のみ）
+Google Books: （選んだ1件の infoLink または previewLink をそのまま。なければ「不明」）`;
 
 /**
  * OCR 下書きを @cloudflare/ai-utils の embedded function calling で
- * Amazon.co.jp 検索（HTML取得）に基づき整形します。
+ * Google Books API に基づき整形します。
  */
 export const enrichOcrDraftWithCatalogTools = async (
-  env: { AI: Ai },
+  env: Pick<Env, "AI" | "GOOGLE_BOOKS_API_KEY">,
   ocrDraft: string,
 ): Promise<string> => {
   const draft = ocrDraft.trim();
   if (!draft) {
     return ocrDraft;
   }
+
+  const searchGoogleBooksTool: AiTextGenerationToolInputWithFunction = {
+    name: "search_google_books",
+    description:
+      "Google Books で書籍を検索し、JSON（query・results 配列）を返します。OCRのタイトルなら field=title、著者名なら field=author で query を渡してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        field: {
+          type: "string",
+          description:
+            '必ず "title" または "author" のいずれか。title は書名、author は著者名での検索。',
+        },
+        query: {
+          type: "string",
+          description: "検索語（タイトルの一部または著者名）。",
+        },
+      },
+      required: ["field", "query"],
+    },
+    function: async (args: { field?: unknown; query?: unknown }) => {
+      const field = args?.field === "author" ? "author" : "title";
+      const query = typeof args?.query === "string" ? args.query : "";
+      const payload =
+        field === "author"
+          ? await searchGoogleBooksByAuthor(env, query)
+          : await searchGoogleBooksByTitle(env, query);
+      return JSON.stringify(payload);
+    },
+  };
 
   const ai = env.AI as unknown as Parameters<typeof runWithTools>[0];
   const model = LLAMA_MODEL as unknown as Parameters<typeof runWithTools>[1];
@@ -198,7 +209,7 @@ export const enrichOcrDraftWithCatalogTools = async (
           content: `次の OCR 下書きを整えてください:\n\n${draft}`,
         },
       ],
-      tools: [searchAmazonJpBooksTool],
+      tools: [searchGoogleBooksTool],
     },
     {
       maxRecursiveToolRuns: 2,
