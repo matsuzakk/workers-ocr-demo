@@ -1,10 +1,7 @@
 import type { AiTextGenerationToolInputWithFunction } from "@cloudflare/ai-utils";
 import { runWithTools } from "@cloudflare/ai-utils";
 import type { Env } from "../env";
-import {
-  searchGoogleBooksByAuthor,
-  searchGoogleBooksByTitle,
-} from "./books-search/google";
+import { searchAmazonJpBooksViaWebSearch } from "./books-search/amazon";
 
 const KIMI_MODEL = "@cf/moonshotai/kimi-k2.5" as const;
 
@@ -140,24 +137,24 @@ export const runOcr = async (
 
 const LLAMA_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct" as const;
 
-const ENRICH_SYSTEM = `あなたは書誌データの編集者です。ユーザーから渡される「OCRで読み取った下書き」を基に、必ず search_google_books を1回以上呼び出してください。
+const ENRICH_SYSTEM = `あなたは書誌データの編集者です。ユーザーから渡される「OCRで読み取った下書き」を基に、必ず search_amazon_jp_web を1回以上呼び出してください。
 
-Google Books API の JSON（results に title・authors・previewLink・infoLink 等）を確認し、OCRのタイトル・著者に最も近い候補を選んでください。field は title（表題で探す）か author（著者で探す）を状況に応じて選び、必要なら別の query で繰り返してもよい。
+ツールは Google の検索 API で amazon.co.jp に限定した結果（results の title・link・snippet・isbn10_from_url）を返します。OCRのタイトル・著者に最も近い候補を選び、必要なら keywords を変えて再検索してもよい。
 
-最終回答はツールで得た事実を優先し、次の行形式のみで書くこと。ISBNはOCRで読み取れたもののみ採用し、ツール結果に明確な根拠がない限り捏造しない。
+最終回答はツールで得た事実を優先し、次の行形式のみで書くこと。ISBNはツールの isbn10_from_url または OCR で読み取れたもののみ。根拠がなければ「不明」。捏造しない。
 
 タイトル: （候補とOCRを突き合わせた表記）
 著者: （分かる範囲）
-ISBN: （OCRで根拠がある場合のみ。なければ「不明」）
-その他: （ツール結果やOCRから補える重要表記のみ）
-Google Books: （選んだ1件の infoLink または previewLink をそのまま。なければ「不明」）`;
+ISBN: （上記ルールに従う）
+その他: （スニペットやOCRから補える重要表記のみ）
+Amazon JP（URL）: （選んだ1件の link をそのまま。なければ「不明」）`;
 
 /**
  * OCR 下書きを @cloudflare/ai-utils の embedded function calling で
- * Google Books API に基づき整形します。
+ * Web 検索（amazon.co.jp 限定・JSON API）に基づき整形します。
  */
 export const enrichOcrDraftWithCatalogTools = async (
-  env: Pick<Env, "AI" | "GOOGLE_BOOKS_API_KEY">,
+  env: Pick<Env, "AI" | "GOOGLE_CSE_API_KEY" | "GOOGLE_CSE_CX">,
   ocrDraft: string,
 ): Promise<string> => {
   const draft = ocrDraft.trim();
@@ -165,32 +162,24 @@ export const enrichOcrDraftWithCatalogTools = async (
     return ocrDraft;
   }
 
-  const searchGoogleBooksTool: AiTextGenerationToolInputWithFunction = {
-    name: "search_google_books",
+  const searchAmazonJpWebTool: AiTextGenerationToolInputWithFunction = {
+    name: "search_amazon_jp_web",
     description:
-      "Google Books で書籍を検索し、JSON（query・results 配列）を返します。OCRのタイトルなら field=title、著者名なら field=author で query を渡してください。",
+      "amazon.co.jp 向けの Web 検索（JSON）。OCRから推測した書名・著者名などを短いキーワードにして keywords に渡す。",
     parameters: {
       type: "object",
       properties: {
-        field: {
+        keywords: {
           type: "string",
           description:
-            '必ず "title" または "author" のいずれか。title は書名、author は著者名での検索。',
-        },
-        query: {
-          type: "string",
-          description: "検索語（タイトルの一部または著者名）。",
+            "検索キーワード（タイトル断片、著者名など。ツール側で amazon 付与とドメイン限定を行う）。",
         },
       },
-      required: ["field", "query"],
+      required: ["keywords"],
     },
-    function: async (args: { field?: unknown; query?: unknown }) => {
-      const field = args?.field === "author" ? "author" : "title";
-      const query = typeof args?.query === "string" ? args.query : "";
-      const payload =
-        field === "author"
-          ? await searchGoogleBooksByAuthor(env, query)
-          : await searchGoogleBooksByTitle(env, query);
+    function: async (args: { keywords?: unknown }) => {
+      const keywords = typeof args?.keywords === "string" ? args.keywords : "";
+      const payload = await searchAmazonJpBooksViaWebSearch(env, keywords);
       return JSON.stringify(payload);
     },
   };
@@ -209,7 +198,7 @@ export const enrichOcrDraftWithCatalogTools = async (
           content: `次の OCR 下書きを整えてください:\n\n${draft}`,
         },
       ],
-      tools: [searchGoogleBooksTool],
+      tools: [searchAmazonJpWebTool],
     },
     {
       maxRecursiveToolRuns: 2,

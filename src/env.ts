@@ -8,4 +8,8 @@ export type Env = {
   DB: D1Database;
   /** Google Books API key */
   GOOGLE_BOOKS_API_KEY?: string;
+  /** Google Custom Search JSON API key（Programmable Search・Amazon JP enrich 用） */
+  GOOGLE_CSE_API_KEY?: string;
+  /** Programmable Search Engine の検索エンジン ID（cx） */
+  GOOGLE_CSE_CX?: string;
 };
