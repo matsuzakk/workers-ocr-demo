@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { REGISTRY_DO_NAME } from "../do/registry";
+import type { JobState } from "../do/types";
 import type { Env } from "../env";
 
 const DO_BASE = "https://do.internal";
@@ -54,6 +56,24 @@ export function buildApp() {
       httpMetadata: { contentType: file.type || "application/octet-stream" },
     });
 
+    const regStub = c.env.JOB_REGISTRY.get(
+      c.env.JOB_REGISTRY.idFromName(REGISTRY_DO_NAME),
+    );
+    const appendRes = await regStub.fetch(
+      new Request(doUrl("/append"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      }),
+    );
+    if (!appendRes.ok) {
+      const t = await appendRes.text();
+      return c.json(
+        { error: "ジョブ一覧用ストアへの登録に失敗しました", detail: t },
+        500,
+      );
+    }
+
     // キューにメッセージを送信
     try {
       await c.env.OCR_QUEUE.send({ jobId, r2Key });
@@ -71,6 +91,50 @@ export function buildApp() {
 
   const jobStub = (env: Env, jobId: string) =>
     env.OCR_JOBS.get(env.OCR_JOBS.idFromName(jobId));
+
+  const registryStub = (env: Env) =>
+    env.JOB_REGISTRY.get(env.JOB_REGISTRY.idFromName(REGISTRY_DO_NAME));
+
+  /**
+   * ジョブ一覧（レジストリ DO が保持する ID 順。状態は各ジョブ DO から取得）
+   */
+  app.get("/jobs", async (c) => {
+    const lr = await registryStub(c.env).fetch(
+      new Request(doUrl("/list"), { method: "GET" }),
+    );
+    if (!lr.ok) {
+      const t = await lr.text();
+      return c.json({ error: "ジョブ一覧の取得に失敗しました", detail: t }, 500);
+    }
+    const { jobIds } = (await lr.json()) as { jobIds: string[] };
+
+    const jobs = await Promise.all(
+      jobIds.map(async (jid) => {
+        const r = await jobStub(c.env, jid).fetch(
+          new Request(doUrl("/http"), { method: "GET" }),
+        );
+        if (!r.ok) {
+          return {
+            jobId: jid,
+            createdAt: 0,
+            updatedAt: 0,
+            status: "missing" as const,
+            error: "ジョブ状態を取得できませんでした",
+          };
+        }
+        const s = (await r.json()) as JobState;
+        return {
+          jobId: s.jobId,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          status: s.status,
+          error: s.error,
+        };
+      }),
+    );
+
+    return c.json({ jobs });
+  });
 
   /**
    * ジョブの状態を取得

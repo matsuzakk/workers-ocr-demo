@@ -1,5 +1,7 @@
 node_modules
 .wrangler
+web/.next
+web/out
 dist
 .DS_Store
 *.tsbuildinfo
@@ -7,4 +9,4 @@ dist
 .env
 .env.*
 !.env.example
-test-images/*
+workers/test-images/*

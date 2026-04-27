@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { processMessageBatch } from "./queue";
 
 // DO クラスをエクスポート
+export { JobRegistryDo } from "./do/registry";
 export { OcrJobDo } from "./do/job";
 
 const app = buildApp();

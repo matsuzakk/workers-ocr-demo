@@ -1,20 +1,12 @@
 {
   "name": "workers-ocr-demo",
   "private": true,
-  "type": "module",
+  "workspaces": ["workers", "web"],
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit",
-    "cf-typegen": "wrangler types"
-  },
-  "dependencies": {
-    "hono": "^4.6.12"
-  },
-  "devDependencies": {
-    "@cloudflare/ai-utils": "^1.0.1",
-    "@cloudflare/workers-types": "^4.20241218.0",
-    "typescript": "^5.7.2",
-    "wrangler": "^3.99.0"
+    "dev": "npm run dev -w workers",
+    "dev:workers": "npm run dev -w workers",
+    "dev:web": "npm run dev -w web",
+    "deploy": "npm run deploy -w workers",
+    "typecheck": "npm run typecheck -w workers && npm run typecheck -w web"
   }
 }
