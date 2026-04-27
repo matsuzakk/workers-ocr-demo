@@ -1,0 +1,57 @@
+{
+  "name": "workers-ocr-demo",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-20",
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "books-db",
+      "migrations_dir": "migrations",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "OCR_JOBS",
+        "class_name": "OcrJobDo",
+      },
+    ],
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["OcrJobDo"],
+    },
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "CAPTURES",
+      "bucket_name": "workers-ocr-captures",
+    },
+  ],
+
+  "queues": {
+    "producers": [
+      {
+        "queue": "ocr-jobs",
+        "binding": "OCR_QUEUE",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "ocr-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 2,
+      },
+    ],
+  },
+
+  "ai": {
+    "binding": "AI",
+  },
+}
