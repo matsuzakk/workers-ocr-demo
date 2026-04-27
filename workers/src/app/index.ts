@@ -10,7 +10,21 @@ function doUrl(p: `/${string}`): string {
   return `${DO_BASE}${p}`;
 }
 
+/** クライアントがそのまま img src に使える絶対 URL */
+function publicCaptureUrl(reqUrl: string, jobId: string): string {
+  const path = `/jobs/${encodeURIComponent(jobId)}/capture`;
+  return new URL(path, reqUrl).href;
+}
+
 export function buildApp() {
+  /** OCR ジョブ DO スタブ */
+  const jobStub = (env: Env, jobId: string) =>
+    env.OCR_JOBS.get(env.OCR_JOBS.idFromName(jobId));
+  /** ジョブ一覧 DO スタブ */
+  const registryStub = (env: Env) =>
+    env.JOB_REGISTRY.get(env.JOB_REGISTRY.idFromName(REGISTRY_DO_NAME));
+
+  /** アプリケーション */
   const app = new Hono<{ Bindings: Env }>();
   app.use("/*", cors());
   app.get("/health", (c) => c.json({ ok: true, service: "workers-ocr-demo" }));
@@ -89,11 +103,33 @@ export function buildApp() {
     return c.json({ jobId, r2Key });
   });
 
-  const jobStub = (env: Env, jobId: string) =>
-    env.OCR_JOBS.get(env.OCR_JOBS.idFromName(jobId));
-
-  const registryStub = (env: Env) =>
-    env.JOB_REGISTRY.get(env.JOB_REGISTRY.idFromName(REGISTRY_DO_NAME));
+  /**
+   * ジョブに紐づくキャプチャ画像（R2）
+   */
+  app.get("/jobs/:jobId/capture", async (c) => {
+    const jobId = c.req.param("jobId");
+    const jr = await jobStub(c.env, jobId).fetch(
+      new Request(doUrl("/http"), { method: "GET" }),
+    );
+    if (!jr.ok) {
+      return c.json({ error: "job not found" }, 404);
+    }
+    const s = (await jr.json()) as JobState;
+    if (!s.r2Key) {
+      return c.json({ error: "capture not available" }, 404);
+    }
+    const obj = await c.env.CAPTURES.get(s.r2Key);
+    if (!obj) {
+      return c.json({ error: "image not found" }, 404);
+    }
+    const ct = obj.httpMetadata?.contentType ?? "application/octet-stream";
+    return new Response(obj.body, {
+      headers: {
+        "Content-Type": ct,
+        "Cache-Control": "private, max-age=120",
+      },
+    });
+  });
 
   /**
    * ジョブ一覧（レジストリ DO が保持する ID 順。状態は各ジョブ DO から取得）
@@ -104,7 +140,10 @@ export function buildApp() {
     );
     if (!lr.ok) {
       const t = await lr.text();
-      return c.json({ error: "ジョブ一覧の取得に失敗しました", detail: t }, 500);
+      return c.json(
+        { error: "ジョブ一覧の取得に失敗しました", detail: t },
+        500,
+      );
     }
     const { jobIds } = (await lr.json()) as { jobIds: string[] };
 
@@ -120,6 +159,7 @@ export function buildApp() {
             updatedAt: 0,
             status: "missing" as const,
             error: "ジョブ状態を取得できませんでした",
+            captureUrl: null,
           };
         }
         const s = (await r.json()) as JobState;
@@ -129,6 +169,7 @@ export function buildApp() {
           updatedAt: s.updatedAt,
           status: s.status,
           error: s.error,
+          captureUrl: s.r2Key ? publicCaptureUrl(c.req.url, s.jobId) : null,
         };
       }),
     );
@@ -147,10 +188,13 @@ export function buildApp() {
     if (r.status === 404) {
       return c.json({ error: "job not found" }, 404);
     }
-    return new Response(r.body, {
-      status: r.status,
-      headers: { "Content-Type": "application/json" },
-    });
+    if (!r.ok) {
+      const t = await r.text();
+      return c.json({ error: "ジョブの取得に失敗しました", detail: t }, 502);
+    }
+    const s = (await r.json()) as JobState;
+    const captureUrl = s.r2Key ? publicCaptureUrl(c.req.url, jobId) : null;
+    return c.json({ ...s, captureUrl });
   });
 
   /**

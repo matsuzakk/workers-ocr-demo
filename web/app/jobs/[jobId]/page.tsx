@@ -12,6 +12,7 @@ type JobDetail = {
   error: string | null;
   createdAt: number;
   updatedAt: number;
+  captureUrl: string | null;
 };
 
 function workerBase(): string {
@@ -37,15 +38,12 @@ function statusLabel(status: string): string {
 export default function JobDetailPage() {
   const params = useParams();
   const jobId = typeof params.jobId === "string" ? params.jobId : "";
-  const invalidId = jobId.length === 0;
 
   const [data, setData] = useState<JobDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(!invalidId);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (invalidId) return;
-
     let cancelled = false;
     void (async () => {
       await Promise.resolve();
@@ -83,7 +81,7 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [jobId, invalidId]);
+  }, [jobId]);
 
   return (
     <main className="mx-auto max-w-2xl p-6 text-gray-900">
@@ -95,19 +93,25 @@ export default function JobDetailPage() {
 
       <h1 className="mb-4 text-xl font-semibold">ジョブ詳細</h1>
 
-      {invalidId && (
-        <p className="text-sm text-red-700">ジョブ ID がありません。</p>
-      )}
+      {loading && <p className="text-sm text-gray-600">読み込み中…</p>}
+      {err && !loading && <p className="text-sm text-red-700">{err}</p>}
 
-      {!invalidId && loading && (
-        <p className="text-sm text-gray-600">読み込み中…</p>
-      )}
-      {!invalidId && err && !loading && (
-        <p className="text-sm text-red-700">{err}</p>
-      )}
-
-      {!invalidId && data && !loading && (
+      {data && !loading && (
         <dl className="space-y-3 text-sm">
+          {data.captureUrl && (
+            <div>
+              <dt className="mb-1 font-medium text-gray-700">
+                アップロード画像
+              </dt>
+              <dd>
+                <img
+                  src={data.captureUrl}
+                  alt="アップロードされた画像"
+                  className="max-h-80 max-w-full border border-gray-300 object-contain"
+                />
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="font-medium text-gray-700">ジョブ ID</dt>
             <dd className="mt-0.5 break-all font-mono text-xs">{data.jobId}</dd>
@@ -136,21 +140,21 @@ export default function JobDetailPage() {
               </dd>
             </div>
           )}
+          {data.ocrText && (
+            <div>
+              <dt className="font-medium text-gray-700">読み取り結果</dt>
+              <dd className="mt-0.5">
+                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-gray-50 p-2 text-xs">
+                  {data.ocrText}
+                </pre>
+              </dd>
+            </div>
+          )}
           {data.error && (
             <div>
               <dt className="font-medium text-gray-700">エラー</dt>
               <dd className="mt-0.5 whitespace-pre-wrap rounded border border-red-200 bg-red-50 p-2 text-red-900">
                 {data.error}
-              </dd>
-            </div>
-          )}
-          {data.ocrText && (
-            <div>
-              <dt className="font-medium text-gray-700">OCR 結果</dt>
-              <dd className="mt-0.5">
-                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-gray-50 p-2 text-xs">
-                  {data.ocrText}
-                </pre>
               </dd>
             </div>
           )}

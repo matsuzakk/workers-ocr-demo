@@ -11,6 +11,7 @@ type JobRow = {
   updatedAt: number;
   status: string;
   error: string | null;
+  captureUrl: string | null;
 };
 
 function workerBase(): string {
@@ -191,6 +192,9 @@ export default function Home() {
               <thead>
                 <tr className="border-b border-gray-300 bg-gray-50">
                   <th className="border-r border-gray-200 px-2 py-2 font-medium">
+                    画像
+                  </th>
+                  <th className="border-r border-gray-200 px-2 py-2 font-medium">
                     ジョブ ID
                   </th>
                   <th className="border-r border-gray-200 px-2 py-2 font-medium">
@@ -205,13 +209,24 @@ export default function Home() {
               <tbody>
                 {jobs.length === 0 && !jobsLoading && (
                   <tr>
-                    <td className="px-2 py-3 text-gray-600" colSpan={4}>
+                    <td className="px-2 py-3 text-gray-600" colSpan={5}>
                       ジョブがありません。
                     </td>
                   </tr>
                 )}
                 {jobs.map((j) => (
                   <tr key={j.jobId} className="border-b border-gray-200">
+                    <td className="border-r border-gray-100 px-2 py-2 align-middle">
+                      {j.captureUrl ? (
+                        <img
+                          src={j.captureUrl}
+                          alt=""
+                          className="h-14 max-w-[100px] border border-gray-200 object-contain"
+                        />
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="border-r border-gray-100 px-2 py-2">
                       <Link
                         className="text-blue-700 underline"
@@ -224,10 +239,14 @@ export default function Home() {
                       {statusLabel(j.status)}
                     </td>
                     <td className="border-r border-gray-100 px-2 py-2 whitespace-nowrap text-gray-700">
-                      {new Date(j.createdAt).toLocaleString("ja-JP")}
+                      {j.createdAt
+                        ? new Date(j.createdAt).toLocaleString("ja-JP")
+                        : "—"}
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap text-gray-700">
-                      {new Date(j.updatedAt).toLocaleString("ja-JP")}
+                      {j.updatedAt
+                        ? new Date(j.updatedAt).toLocaleString("ja-JP")
+                        : "—"}
                     </td>
                   </tr>
                 ))}
